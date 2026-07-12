@@ -1,20 +1,48 @@
 {
   "facecam_rect": {
-    "x": 0.0,
-    "y": 0.27104377104377103,
-    "w": 0.22537878787878787,
-    "h": 0.29797979797979796
+    "x": 0.005681818181818181,
+    "y": 0.7171717171717171,
+    "w": 0.2140151515151515,
+    "h": 0.2828282828282828
   },
   "gameplay_rect": {
-    "x": 0.2746212121212121,
-    "y": 0.00505050505050505,
-    "w": 0.5378787878787878,
-    "h": 0.9949494949494949
+    "x": 0.3049242424242424,
+    "y": 0.0,
+    "w": 0.5416666666666666,
+    "h": 1.0
   },
   "split_ratio": 0.4158249158249158,
-  "keywords_susto": ["meu deus", "caralho", "porra", "que susto", "socorro", "credo", "eita", "para tudo", "pera ai", "peraí"],
-  "keywords_vitoria": ["consegui", "platinei", "finalmente", "isso ai", "mandei bem", "perfeito", "conquista", "zerei"],
-  "keywords_engracado": ["kkkk", "kkk", "morri", "hilario", "engracado", "mds", "nao acredito"],
+  "keywords_susto": [
+    "meu deus",
+    "caralho",
+    "porra",
+    "que susto",
+    "socorro",
+    "credo",
+    "eita",
+    "para tudo",
+    "pera ai",
+    "peraí"
+  ],
+  "keywords_vitoria": [
+    "consegui",
+    "platinei",
+    "finalmente",
+    "isso ai",
+    "mandei bem",
+    "perfeito",
+    "conquista",
+    "zerei"
+  ],
+  "keywords_engracado": [
+    "kkkk",
+    "kkk",
+    "morri",
+    "hilario",
+    "engracado",
+    "mds",
+    "nao acredito"
+  ],
   "outro": {
     "enabled": true,
     "character_path": "assets/personagem.png",

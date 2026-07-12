@@ -817,8 +817,9 @@ def render_outro_video(
     text_line1: str,
     text_line2: str,
     duration_s: float = 4.0,
-    fps: float = 30.0,
+    output_fps: float = 30.0,
     size: tuple = (1080, 1920),
+    status=None,
 ) -> bool:
     """Gera a tela de encerramento (estética 'future funk'/synthwave) com o personagem do canal
     e a chamada pra assistir o vídeo completo, no mesmo formato/codec dos outros clipes pra poder
@@ -830,7 +831,13 @@ def render_outro_video(
     from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
     W, H = size
-    n_frames = int(fps * duration_s)
+    # Renderiza os frames em Python num fps fixo e baixo (a animação é lenta, 30fps já fica
+    # suave) e deixa o ffmpeg reamostrar pro fps de saída na hora de codificar — reamostragem no
+    # ffmpeg é quase instantânea, enquanto gerar cada frame em PIL (com vários desfoques/glow)
+    # é caro. Sem isso, um vídeo de origem em 50/60fps fazia essa etapa demorar minutos e parecer
+    # travada (o dobro ou mais de frames pra gerar, sem nenhum ganho visual real).
+    render_fps = min(output_fps, 30.0)
+    n_frames = int(render_fps * duration_s)
 
     sky_top, sky_mid, horizon_c = (13, 6, 41), (72, 15, 92), (255, 87, 143)
     sun_top, sun_bottom = (255, 221, 89), (255, 42, 133)
@@ -939,15 +946,22 @@ def render_outro_video(
     font1 = load_font("arialbd.ttf", int(W * 0.044))
     font2 = load_font("impact.ttf", int(W * 0.085))
 
+    # Céu e sol são sempre iguais em todo frame (só a grade se move e o personagem/texto entram) —
+    # renderizar isso de novo em cada frame era o gargalo real (put_pixel linha a linha + composição
+    # de ~120 faixas do sol, repetido 100+ vezes). Faz uma vez só e reaproveita uma cópia por frame.
+    static_bg = make_sky()
+    static_bg = draw_sun(static_bg)
+
     frames_dir = TEMP_DIR / "outro_frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
     for i in range(n_frames):
-        base = make_sky()
-        base = draw_sun(base)
+        if status and i % 10 == 0:
+            status.update("Gerando tela de encerramento...", f"frame {i + 1}/{n_frames}", fraction=0.79)
+        base = static_bg.copy()
         phase = (i / n_frames) * 11 * 2.2
         base = draw_grid(base, phase)
 
-        t_char = i / (fps * 0.9)
+        t_char = i / (render_fps * 0.9)
         scale = max(0.0, ease_out_back(t_char)) if t_char < 1 else 1.0
         if scale > 0:
             cw, ch = int(character.width * scale), int(character.height * scale)
@@ -956,7 +970,7 @@ def render_outro_video(
                 cy_final = int(H * 0.60)
                 base.alpha_composite(char_scaled, (W // 2 - cw // 2, cy_final - ch // 2))
 
-        t_text = (i - fps * 1.1) / (fps * 0.6)
+        t_text = (i - render_fps * 1.1) / (render_fps * 0.6)
         if t_text > 0:
             overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             draw_text_glow(overlay, text_line1, font1, W // 2, int(H * 0.78), (255, 255, 255), (0, 220, 255), 8)
@@ -969,8 +983,9 @@ def render_outro_video(
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
-        "ffmpeg", "-y", "-framerate", str(fps), "-i", str(frames_dir / "frame_%04d.png"),
+        "ffmpeg", "-y", "-framerate", str(render_fps), "-i", str(frames_dir / "frame_%04d.png"),
         "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-shortest",
+        "-r", str(output_fps),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "160k",
         str(out_path),
@@ -1752,7 +1767,8 @@ def main() -> None:
             outro_cfg.get("text_line1", "Assista o vídeo completo em"),
             outro_cfg.get("text_line2", "youtube.com/@Gamoxkun"),
             duration_s=float(outro_cfg.get("duration_s", 4.0)),
-            fps=_get_video_fps(video_path),
+            output_fps=_get_video_fps(video_path),
+            status=win,
         ):
             outro_path = None
 
