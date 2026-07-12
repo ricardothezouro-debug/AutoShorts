@@ -1,0 +1,24 @@
+.env
+__pycache__/
+*.pyc
+entrada/*
+!entrada/.gitkeep
+saida/*
+!saida/.gitkeep
+temp/*
+!temp/.gitkeep
+
+# binários pesados e artefatos de build (não cabem em push normal do GitHub) —
+# gerados via `pyinstaller` / `iscc AutoShorts.iss`, não versionados
+bin/
+build/
+installer_output/
+AutoShorts.exe
+*.log
+
+# lixo de testes/experimentos
+comm5.png
+preview_outro.mp4
+nul
+run_*.txt
+%TEMP%/

@@ -1,0 +1,25 @@
+{
+  "facecam_rect": {
+    "x": 0.0,
+    "y": 0.27104377104377103,
+    "w": 0.22537878787878787,
+    "h": 0.29797979797979796
+  },
+  "gameplay_rect": {
+    "x": 0.2746212121212121,
+    "y": 0.00505050505050505,
+    "w": 0.5378787878787878,
+    "h": 0.9949494949494949
+  },
+  "split_ratio": 0.4158249158249158,
+  "keywords_susto": ["meu deus", "caralho", "porra", "que susto", "socorro", "credo", "eita", "para tudo", "pera ai", "peraí"],
+  "keywords_vitoria": ["consegui", "platinei", "finalmente", "isso ai", "mandei bem", "perfeito", "conquista", "zerei"],
+  "keywords_engracado": ["kkkk", "kkk", "morri", "hilario", "engracado", "mds", "nao acredito"],
+  "outro": {
+    "enabled": true,
+    "character_path": "assets/personagem.png",
+    "text_line1": "Assista o vídeo completo em",
+    "text_line2": "youtube.com/@Gamoxkun",
+    "duration_s": 4.0
+  }
+}
