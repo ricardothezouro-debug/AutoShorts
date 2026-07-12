@@ -43,6 +43,100 @@ DEFAULT_TRANSCRIBE_MODEL = "whisper-large-v3-turbo"
 DEFAULT_LLM_MODEL = "llama-3.3-70b-versatile"
 CHUNK_SECONDS = 600  # 10 min — mantém cada upload bem abaixo do limite de tamanho da API do Groq
 
+# "Terror" é o perfil original e não muda em nada (mesmo prompt, mesma lógica de sempre) — os
+# outros gêneros reaproveitam a mesma arquitetura (picos de áudio/facecam + keywords + LLM lendo
+# transcrição -> beats -> histórias curadas), só trocando o "tempero": como o prompt descreve o
+# conteúdo, quais categorias de highlight existem, e qual delas vira o fallback de um pico forte
+# sem nenhuma outra confirmação (equivalente ao "susto" do terror).
+GENRE_PROFILES = {
+    "terror": {
+        "label": "Terror (padrão)",
+        "fallback_categoria": "susto",
+        "has_contexto": False,
+    },
+    "reacao": {
+        "label": "Reação",
+        "context_desc": "vídeo de reação, onde o criador assiste e comenta algum conteúdo",
+        "categorias": {
+            "reacao_forte": "reação física ou verbal forte e genuína (surpresa, choque, gargalhada, indignação) diante do que está sendo assistido",
+            "comentario_engracado": "comentário ou tirada engraçada do criador, com graça de verdade — não qualquer piada morna",
+            "opiniao": "opinião ou análise forte sobre o conteúdo assistido, que funcionaria como citação fora de contexto",
+        },
+        "fallback_categoria": "reacao_forte",
+        "fallback_label": "reação forte",
+        "has_contexto": False,
+        "priority_text": (
+            'IMPORTANTE: priorize incluir o MAIOR número possível dos beats de categoria '
+            '"reacao_forte" — não deixe nenhum de fora a menos que seja necessário pra não '
+            'estourar a duração. Beats "comentario_engracado" ou "opiniao" só devem entrar se '
+            "genuinamente forem fortes o bastante pra segurar um Short sozinhos — prefira uma "
+            "compilação mais curta (mas ainda dentro do mínimo) a encher com conteúdo fraco só "
+            "pra bater a duração alvo."
+        ),
+        "storytelling_text": None,
+    },
+    "generico": {
+        "label": "Gameplay Genérico",
+        "context_desc": "vídeo de gameplay em geral, sem gênero específico (não é necessariamente terror)",
+        "categorias": {
+            "destaque": "um momento de destaque no gameplay — jogada impressionante, virada, momento tenso ou marcante, seja qual for o motivo",
+            "engracado": "piada com graça de verdade ou reação cômica clara e inesperada — não qualquer comentário casual",
+            "frase": "fala isolada que já faria sentido fora de contexto como citação forte",
+            "contexto": "o criador explicando do que se trata o vídeo ou um segmento dele (ex: 'hoje eu vou...', 'nesse vídeo...') — importante pro Short fazer sentido sozinho, mesmo sem ser empolgante",
+        },
+        "fallback_categoria": "destaque",
+        "fallback_label": "destaque",
+        "has_contexto": True,
+        "priority_text": (
+            'IMPORTANTE: priorize incluir os beats de categoria "destaque" mais fortes — não '
+            "precisa usar todos, prefira qualidade. Beats \"engracado\" ou \"frase\" só devem "
+            "entrar se genuinamente forem fortes o bastante pra segurar um Short sozinhos."
+        ),
+        "storytelling_text": textwrap.dedent("""
+            Storytelling importa muito aqui: um Short feito de picos isolados sem conexão não
+            funciona tão bem quanto um que conta uma mini-história coerente. Sempre que existir um
+            beat de categoria "contexto" (o criador explicando do que se trata o vídeo ou o
+            segmento), priorize abrir a compilação com ele, mesmo que cronologicamente distante dos
+            outros beats escolhidos — isso ajuda quem não viu o vídeo completo a entender do que se
+            trata o Short. Prefira montar sequências de beats que juntos façam sentido como um
+            mini-arco (começo, desenvolvimento, desfecho), não só uma lista de momentos aleatórios.
+        """).strip(),
+    },
+    "platina": {
+        "label": "Platina (documentário)",
+        "context_desc": (
+            "documentário longo sobre platinar um jogo — cobre a história do jogo, a experiência "
+            "pessoal do criador tentando platinar, e tem edição com humor e narração"
+        ),
+        "categorias": {
+            "conquista": "um marco real de progresso na platina — troféu difícil conquistado, virada de jogo, alívio depois de uma dificuldade",
+            "historia": "um trecho interessante sobre a história/lore do jogo, contado ou comentado pelo criador",
+            "engracado": "piada, comentário ou reação genuinamente engraçada — não qualquer fala casual",
+            "dificuldade": "um momento de frustração/raiva real com a dificuldade de platinar algo — mostra a luta genuína, não uma reclamação qualquer",
+            "contexto": "o criador explicando do que se trata o vídeo ou de que jogo/parte da saga está falando — importante pro Short fazer sentido sozinho, mesmo sem ser empolgante",
+        },
+        "fallback_categoria": "conquista",
+        "fallback_label": "conquista",
+        "has_contexto": True,
+        "priority_text": (
+            "IMPORTANTE: aqui NÃO é sobre maximizar quantidade de uma categoria só — o objetivo é "
+            "uma mini-história coerente misturando categorias diferentes (ex: um pouco de história "
+            "do jogo, a dificuldade enfrentada, e a conquista/alívio no final). Beats fracos ou "
+            "repetitivos não devem entrar só pra bater a duração alvo."
+        ),
+        "storytelling_text": textwrap.dedent("""
+            Storytelling é o coração desse gênero: o vídeo original é um documentário narrado, então
+            os Shorts precisam fazer sentido como uma mini-história, não uma sequência de cortes
+            soltos. Sempre que existir um beat de categoria "contexto" (o criador explicando do que
+            se trata o vídeo/segmento, ex: qual jogo, qual parte da saga), priorize abrir a
+            compilação com ele, mesmo que cronologicamente distante dos outros beats escolhidos —
+            sem esse contexto, quem não viu o vídeo completo não entende do que se trata. Prefira
+            uma sequência que tenha um arco (contexto/setup -> desenvolvimento/dificuldade ->
+            desfecho/conquista) a só empilhar momentos engraçados sem conexão entre si.
+        """).strip(),
+    },
+}
+
 
 @dataclass
 class Segment:
@@ -348,7 +442,7 @@ def find_keyword_hits(segments: list, keywords: list) -> list:
     return hits
 
 
-def detect_highlights_llm(segments: list, groq_client, llm_model: str, status=None) -> list:
+def detect_highlights_llm(segments: list, groq_client, llm_model: str, genero: str = "terror", status=None) -> list:
     if not segments:
         return []
 
@@ -369,38 +463,75 @@ def detect_highlights_llm(segments: list, groq_client, llm_model: str, status=No
         chunk_segments = seg_by_chunk[chunk_idx]
         transcript_text = "\n".join(f"[{s.start:.1f}-{s.end:.1f}] {s.text}" for s in chunk_segments)
 
-        prompt = textwrap.dedent(f"""
-            Você está analisando a transcrição de um trecho de um vídeo de gameplay de terror
-            com facecam. Cada linha tem o formato [inicio-fim] fala, em segundos.
+        if genero == "terror":
+            prompt = textwrap.dedent(f"""
+                Você está analisando a transcrição de um trecho de um vídeo de gameplay de terror
+                com facecam. Cada linha tem o formato [inicio-fim] fala, em segundos.
 
-            Aponte momentos de destaque:
-            - "susto": QUALQUER menção ou indício de um momento de tensão/susto real — grito,
-              sobressalto, exclamação de medo, comentário logo após um susto, mesmo que a fala em
-              si seja curta. Aqui é melhor marcar demais do que de menos — na dúvida, marque como
-              susto.
-            - "engracado": só marque se reconhecer uma piada com graça de verdade ou reação cômica
-              clara e inesperada — NÃO qualquer comentário casual do jogador. Na dúvida, não
-              marque.
-            - "frase": só marque se a fala isolada já fizesse sentido fora de contexto como uma
-              citação forte (virada de jogo importante, reflexão com profundidade, conquista
-              clara) — NÃO uma descrição comum do que está acontecendo na tela. Na dúvida, não
-              marque.
+                Aponte momentos de destaque:
+                - "susto": QUALQUER menção ou indício de um momento de tensão/susto real — grito,
+                  sobressalto, exclamação de medo, comentário logo após um susto, mesmo que a fala em
+                  si seja curta. Aqui é melhor marcar demais do que de menos — na dúvida, marque como
+                  susto.
+                - "engracado": só marque se reconhecer uma piada com graça de verdade ou reação cômica
+                  clara e inesperada — NÃO qualquer comentário casual do jogador. Na dúvida, não
+                  marque.
+                - "frase": só marque se a fala isolada já fizesse sentido fora de contexto como uma
+                  citação forte (virada de jogo importante, reflexão com profundidade, conquista
+                  clara) — NÃO uma descrição comum do que está acontecendo na tela. Na dúvida, não
+                  marque.
 
-            Para cada momento, escolha start/end que cubram a duração NATURAL do momento inteiro,
-            não apenas 2-3 segundos soltos: inclua o contexto/buildup e o desfecho/reação. Shorts do
-            YouTube podem durar de poucos segundos até 3 minutos (180s) — um susto rápido pode ter
-            15-20s, já uma reflexão ou história mais longa pode e deve durar bem mais (30s a 3min) se
-            o conteúdo sustentar isso. Não encurte artificialmente um momento que precisa de mais tempo
-            para fazer sentido.
+                Para cada momento, escolha start/end que cubram a duração NATURAL do momento inteiro,
+                não apenas 2-3 segundos soltos: inclua o contexto/buildup e o desfecho/reação. Shorts do
+                YouTube podem durar de poucos segundos até 3 minutos (180s) — um susto rápido pode ter
+                15-20s, já uma reflexão ou história mais longa pode e deve durar bem mais (30s a 3min) se
+                o conteúdo sustentar isso. Não encurte artificialmente um momento que precisa de mais tempo
+                para fazer sentido.
 
-            Responda em JSON, com este formato exato:
-            {{"highlights": [{{"start": <numero>, "end": <numero>, "categoria": "susto|engracado|frase", "titulo": "<3 a 6 palavras descrevendo a cena, ex: reflexao sobre coxinha>", "motivo": "<explicacao curta>"}}]}}
+                Responda em JSON, com este formato exato:
+                {{"highlights": [{{"start": <numero>, "end": <numero>, "categoria": "susto|engracado|frase", "titulo": "<3 a 6 palavras descrevendo a cena, ex: reflexao sobre coxinha>", "motivo": "<explicacao curta>"}}]}}
 
-            Se não houver nenhum momento relevante neste trecho, responda {{"highlights": []}}.
+                Se não houver nenhum momento relevante neste trecho, responda {{"highlights": []}}.
 
-            Transcrição:
-            {transcript_text}
-        """).strip()
+                Transcrição:
+                {transcript_text}
+            """).strip()
+        else:
+            profile = GENRE_PROFILES[genero]
+            categorias_texto = "\n".join(f'- "{cat}": {desc}' for cat, desc in profile["categorias"].items())
+            categorias_opcoes = "|".join(profile["categorias"].keys())
+            contexto_note = (
+                '\n\nA categoria "contexto" é especialmente importante: mesmo sem ser um momento '
+                "empolgante, ela ajuda um corte curto a fazer sentido sozinho pra quem não viu o "
+                "vídeo completo. Não deixe de marcar esses momentos."
+                if profile["has_contexto"] else ""
+            )
+
+            prompt = textwrap.dedent(f"""
+                Você está analisando a transcrição de um trecho de um {profile["context_desc"]}.
+                Cada linha tem o formato [inicio-fim] fala, em segundos.
+
+                Aponte momentos de destaque, usando estas categorias:
+                {categorias_texto}
+
+                Na dúvida entre marcar ou não um momento, não marque — só aponte quando o trecho
+                realmente se encaixa bem numa das categorias acima.{contexto_note}
+
+                Para cada momento, escolha start/end que cubram a duração NATURAL do momento inteiro,
+                não apenas 2-3 segundos soltos: inclua o contexto/buildup e o desfecho/reação. Shorts do
+                YouTube podem durar de poucos segundos até 3 minutos (180s) — um momento rápido pode ter
+                15-20s, já uma reflexão ou história mais longa pode e deve durar bem mais (30s a 3min) se
+                o conteúdo sustentar isso. Não encurte artificialmente um momento que precisa de mais tempo
+                para fazer sentido.
+
+                Responda em JSON, com este formato exato:
+                {{"highlights": [{{"start": <numero>, "end": <numero>, "categoria": "{categorias_opcoes}", "titulo": "<3 a 6 palavras descrevendo a cena>", "motivo": "<explicacao curta>"}}]}}
+
+                Se não houver nenhum momento relevante neste trecho, responda {{"highlights": []}}.
+
+                Transcrição:
+                {transcript_text}
+            """).strip()
 
         try:
             resp = groq_client.chat.completions.create(
@@ -439,15 +570,19 @@ def build_beats(
     facecam_motion_standalone_sigma: float = 4.0,
     pre_silence_db: float = 8.0,
     pre_stillness_sigma: float = 1.0,
+    fallback_categoria: str = "susto",
 ) -> list:
     """Junta os sinais brutos (picos de áudio, keywords, highlights do LLM) em uma lista de
     'beats' — momentos curtos de destaque que depois servem de matéria-prima para as histórias.
-    Não força duração mínima/máxima de short aqui; isso é decidido na montagem de cada história."""
+    Não força duração mínima/máxima de short aqui; isso é decidido na montagem de cada história.
+    fallback_categoria é a categoria "reativa" desse gênero (susto no terror, reação forte no
+    gênero reação, etc) — usada quando um pico forte de áudio/facecam vira beat sozinho, sem
+    nenhum highlight do LLM/keyword por perto pra dar um rótulo melhor."""
     # Picos de áudio fracos/ambíguos (música, efeito sonoro do jogo) só reforçam um beat que já
     # existe por keyword/LLM. Já um pico bem forte (>= audio_standalone_db) é provavelmente um
-    # grito/susto real mesmo sem fala reconhecível, então ele também pode virar beat sozinho.
-    # Sustos precisam de mais tempo de build-up antes do ponto de impacto pra criar tensão —
-    # cortar direto pro grito, sem nada antes, mata o efeito de susto.
+    # grito/reação real mesmo sem fala reconhecível, então ele também pode virar beat sozinho.
+    # Esses momentos precisam de mais tempo de build-up antes do ponto de impacto pra criar tensão —
+    # cortar direto pro grito, sem nada antes, mata o efeito.
     susto_pre_pad = max(pre_pad, 8.0)
 
     raw_points = []
@@ -459,7 +594,7 @@ def build_beats(
     for h in llm_highlights:
         reason = f"llm:{h['categoria']}"
         label = h.get("titulo") or h.get("categoria") or "momento"
-        beat_pre_pad = susto_pre_pad if h.get("categoria") == "susto" else pre_pad
+        beat_pre_pad = susto_pre_pad if h.get("categoria") == fallback_categoria else pre_pad
         raw_points.append((h["start"] - beat_pre_pad, h["end"] + post_pad, reason, label, 3, h.get("categoria", "?")))
 
     # Picos fortes dentro da zona de abertura do vídeo (intro, tela de carregamento, jingle)
@@ -477,7 +612,7 @@ def build_beats(
     weak_peaks = [(t, d) for t, d, dip in audio_peaks if not (is_confident_audio(d, dip) and t >= intro_skip_s)]
 
     for t, _d in strong_peaks:
-        raw_points.append((t - susto_pre_pad, t + post_pad, "audio_peak_forte", "susto", 1, "susto"))
+        raw_points.append((t - susto_pre_pad, t + post_pad, "audio_peak_forte", fallback_categoria, 1, fallback_categoria))
 
     # Reação forte na facecam (susto/riso visual) sem precisar de pico de áudio junto — mesma
     # lógica forte/fraca do áudio (incluindo a exigência de "quietude antes"), mas numa escala
@@ -491,7 +626,7 @@ def build_beats(
     weak_motion = [(t, d) for t, d, dip in facecam_motion_peaks if not (is_confident_motion(d, dip) and t >= intro_skip_s)]
 
     for t, _d in strong_motion:
-        raw_points.append((t - susto_pre_pad, t + post_pad, "facecam_motion_forte", "susto", 1, "susto"))
+        raw_points.append((t - susto_pre_pad, t + post_pad, "facecam_motion_forte", fallback_categoria, 1, fallback_categoria))
 
     raw_points = [(max(0.0, s), e, r, lb, p, cat) for s, e, r, lb, p, cat in raw_points if e > s]
     raw_points.sort(key=lambda x: x[0])
@@ -551,6 +686,7 @@ def curate_stories(
     num_stories: int,
     target_min: float,
     target_max: float,
+    genero: str = "terror",
     status=None,
 ) -> list:
     """Pede pro LLM organizar os beats detectados em algumas histórias de 'melhores momentos',
@@ -565,54 +701,81 @@ def curate_stories(
     # (já validado e aprovado) nenhum beat nunca tem essas reasons, então o prompt fica idêntico.
     has_facecam_signal = any(r.startswith("facecam_motion") for b in beats for r in b.reasons)
 
+    fallback_label = "susto" if genero == "terror" else GENRE_PROFILES[genero]["fallback_label"]
+
     def beat_tag(b):
         tags = []
         if "audio_peak_forte" in b.reasons:
-            tags.append("GRITO FORTE SEM FALA - alta confianca de susto real")
+            tags.append(f"GRITO FORTE SEM FALA - alta confianca de {fallback_label} real")
         if "facecam_motion_forte" in b.reasons:
-            tags.append("REACAO VISUAL FORTE NA FACECAM - possivel susto real, mas SEM confirmacao sonora")
+            tags.append(f"REACAO VISUAL FORTE NA FACECAM - possivel {fallback_label} real, mas SEM confirmacao sonora")
         return f" [{'; '.join(tags)}]" if tags else ""
 
     lines = [f"[{i}] {b.start:.1f}-{b.end:.1f} ({b.categoria}): {b.label}{beat_tag(b)}" for i, b in enumerate(beats)]
     beats_text = "\n".join(lines)
 
-    prompt_main = textwrap.dedent(f"""
-        Aqui está a lista de momentos de destaque (beats) detectados em um vídeo de gameplay de
-        terror com facecam. Cada linha tem o formato [indice] inicio-fim (categoria): descrição,
-        com os tempos em segundos. Beats marcados "GRITO FORTE SEM FALA" vieram de um pico de
-        áudio muito forte (bem acima do normal) mesmo sem fala reconhecível — são fortes
-        candidatos a susto real e devem ser priorizados, não descartados.
+    if genero == "terror":
+        prompt_main = textwrap.dedent(f"""
+            Aqui está a lista de momentos de destaque (beats) detectados em um vídeo de gameplay de
+            terror com facecam. Cada linha tem o formato [indice] inicio-fim (categoria): descrição,
+            com os tempos em segundos. Beats marcados "GRITO FORTE SEM FALA" vieram de um pico de
+            áudio muito forte (bem acima do normal) mesmo sem fala reconhecível — são fortes
+            candidatos a susto real e devem ser priorizados, não descartados.
 
-        Monte ATÉ {num_stories} compilações de "melhores momentos" distintas — {num_stories} é um
-        teto, não uma obrigação. Se o material só for bom o suficiente para menos compilações (ou
-        até só 1), gere menos: não force conteúdo fraco/repetitivo só pra bater a quantidade.
+            Monte ATÉ {num_stories} compilações de "melhores momentos" distintas — {num_stories} é um
+            teto, não uma obrigação. Se o material só for bom o suficiente para menos compilações (ou
+            até só 1), gere menos: não force conteúdo fraco/repetitivo só pra bater a quantidade.
 
-        Cada compilação reúne vários desses beats (não precisam ser contínuos no vídeo original)
-        formando um vídeo editado com duração total entre {target_min:.0f}s e {target_max:.0f}s
-        (soma da duração de cada beat escolhido, contando repetições).
+            Cada compilação reúne vários desses beats (não precisam ser contínuos no vídeo original)
+            formando um vídeo editado com duração total entre {target_min:.0f}s e {target_max:.0f}s
+            (soma da duração de cada beat escolhido, contando repetições).
 
-        Mantenha a ordem cronológica dos beats dentro de cada compilação.
+            Mantenha a ordem cronológica dos beats dentro de cada compilação.
 
-        IMPORTANTE: priorize incluir o MAIOR número possível dos beats de categoria "susto" — não
-        deixe nenhum de fora a menos que seja necessário pra não estourar a duração. Beats
-        "engracado" ou "frase" só devem entrar se genuinamente forem fortes o bastante pra segurar
-        um Short sozinhos — prefira uma compilação mais curta (mas ainda dentro do mínimo) a encher
-        com conteúdo fraco só pra bater a duração alvo. Evite repetir o mesmo tipo de piada/susto
-        várias vezes seguidas dentro da MESMA compilação. Não repita o mesmo beat dentro da MESMA
-        compilação. Não tem problema repetir o mesmo beat em mais de uma compilação diferente se
-        isso fizer sentido pra contar a história — use com moderação.
-    """).strip()
+            IMPORTANTE: priorize incluir o MAIOR número possível dos beats de categoria "susto" — não
+            deixe nenhum de fora a menos que seja necessário pra não estourar a duração. Beats
+            "engracado" ou "frase" só devem entrar se genuinamente forem fortes o bastante pra segurar
+            um Short sozinhos — prefira uma compilação mais curta (mas ainda dentro do mínimo) a encher
+            com conteúdo fraco só pra bater a duração alvo. Evite repetir o mesmo tipo de piada/susto
+            várias vezes seguidas dentro da MESMA compilação. Não repita o mesmo beat dentro da MESMA
+            compilação. Não tem problema repetir o mesmo beat em mais de uma compilação diferente se
+            isso fizer sentido pra contar a história — use com moderação.
+        """).strip()
+    else:
+        profile = GENRE_PROFILES[genero]
+        storytelling_section = f"\n\n{profile['storytelling_text']}" if profile["storytelling_text"] else ""
+        prompt_main = textwrap.dedent(f"""
+            Aqui está a lista de momentos de destaque (beats) detectados em um {profile["context_desc"]}.
+            Cada linha tem o formato [indice] inicio-fim (categoria): descrição, com os tempos em
+            segundos. Beats marcados "GRITO FORTE SEM FALA" vieram de um pico de áudio muito forte
+            (bem acima do normal) mesmo sem fala reconhecível.
 
-    facecam_caveat = textwrap.dedent("""
+            Monte ATÉ {num_stories} compilações de "melhores momentos" distintas — {num_stories} é um
+            teto, não uma obrigação. Se o material só for bom o suficiente para menos compilações (ou
+            até só 1), gere menos: não force conteúdo fraco/repetitivo só pra bater a quantidade.
+
+            Cada compilação reúne vários desses beats (não precisam ser contínuos no vídeo original)
+            formando um vídeo editado com duração total entre {target_min:.0f}s e {target_max:.0f}s
+            (soma da duração de cada beat escolhido, contando repetições).
+
+            Mantenha a ordem cronológica dos beats dentro de cada compilação.
+
+            {profile["priority_text"]} Evite repetir o mesmo tipo de momento várias vezes seguidas
+            dentro da MESMA compilação. Não repita o mesmo beat dentro da MESMA compilação. Não tem
+            problema repetir o mesmo beat em mais de uma compilação diferente se isso fizer sentido
+            pra contar a história — use com moderação.{storytelling_section}
+        """).strip()
+
+    facecam_caveat = textwrap.dedent(f"""
         Este vídeo foi analisado no modo completo, que inclui um sinal extra de movimento na
-        facecam (reação visual: susto, salto, virada de cabeça). Esse sinal é MENOS confiável
-        que áudio forte ou fala reconhecida — pode ser um susto real, mas também pode ser só a
+        facecam (reação visual forte: susto, salto, virada de cabeça). Esse sinal é MENOS confiável
+        que áudio forte ou fala reconhecida — pode ser uma reação real, mas também pode ser só a
         pessoa se ajeitando, rindo ou mexendo a câmera, sem nenhuma confirmação de que algo
-        realmente assustador aconteceu. Um beat com label genérico "susto" e SEM nenhuma outra
+        relevante aconteceu. Um beat com label genérico "{fallback_label}" e SEM nenhuma outra
         confirmação (sem keyword, sem highlight do LLM, sem áudio forte — só "REACAO VISUAL
         FORTE") é incerto. Ao dar a nota "forca": uma compilação cheia desses beats "cegos" e
-        sem confirmação NÃO deve ganhar nota alta só por ter muitos trechos marcados como
-        susto — dê nota alta só se o conteúdo realmente parece forte (áudio confirmado, ou
+        sem confirmação NÃO deve ganhar nota alta só por ter muitos trechos marcados assim —
+        dê nota alta só se o conteúdo realmente parece forte (áudio confirmado, ou
         título/descrição real do que aconteceu), não pela quantidade de beats.
     """).strip()
 
@@ -1499,7 +1662,7 @@ def prompt_for_source_gui() -> tuple:
 
     root = tk.Tk()
     root.title("Corte Automático")
-    root.geometry("480x340")
+    root.geometry("480x430")
     root.resizable(False, False)
 
     tk.Label(root, text="Cole o link do YouTube:", font=("Segoe UI", 10)).pack(pady=(15, 5))
@@ -1537,13 +1700,30 @@ def prompt_for_source_gui() -> tuple:
         variable=mode_var, value="completo",
     ).pack(anchor="w", padx=60)
 
+    tk.Frame(root, height=1, bg="#ddd").pack(fill="x", padx=20, pady=12)
+
+    tk.Label(root, text="Gênero do conteúdo:", font=("Segoe UI", 10, "bold")).pack()
+    genero_var = tk.StringVar(value="terror")
+    genero_labels = {key: profile["label"] for key, profile in GENRE_PROFILES.items()}
+    genero_display = tk.StringVar(value=genero_labels["terror"])
+
+    def on_genero_change(*_args):
+        display = genero_display.get()
+        for key, label in genero_labels.items():
+            if label == display:
+                genero_var.set(key)
+                break
+
+    genero_menu = tk.OptionMenu(root, genero_display, *genero_labels.values(), command=lambda _v: on_genero_change())
+    genero_menu.pack(pady=(4, 0))
+
     def confirm():
         url = url_var.get().strip()
         file_path = file_var.get().strip()
         if url:
-            result["value"] = (url, mode_var.get())
+            result["value"] = (url, mode_var.get(), genero_var.get())
         elif file_path:
-            result["value"] = (file_path, mode_var.get())
+            result["value"] = (file_path, mode_var.get(), genero_var.get())
         else:
             messagebox.showwarning("Corte Automático", "Cole um link do YouTube ou selecione um arquivo de vídeo.")
             return
@@ -1598,6 +1778,10 @@ def parse_args():
         "--mode", choices=["audio", "completo"], default="audio",
         help="'audio': só áudio/transcrição. 'completo': inclui detecção de reações visuais na facecam (mais lento)",
     )
+    parser.add_argument(
+        "--genero", choices=list(GENRE_PROFILES.keys()), default="terror",
+        help="Estilo de conteúdo — muda como a IA categoriza e monta as histórias (terror, reacao, generico, platina)",
+    )
     parser.add_argument("--facecam-motion-floor-sigma", type=float, default=2.0, help="Desvios-padrão acima do normal para considerar QUALQUER movimento na facecam (fraco, só reforça beat existente)")
     parser.add_argument("--facecam-motion-threshold", type=float, default=4.0, help="Desvios-padrão acima do normal a partir do qual um movimento na facecam vira beat sozinho (reação forte sem áudio)")
     parser.add_argument("--pre-stillness-sigma", type=float, default=1.0, help="Desvios-padrão de 'quietude' exigidos nos ~3s antes de um movimento forte na facecam pra confiar nele como reação real (evita falso-positivo de gesticulação contínua)")
@@ -1616,9 +1800,9 @@ def main() -> None:
 
     used_gui = args.url is None
     if used_gui:
-        source, mode = prompt_for_source_gui()
+        source, mode, genero = prompt_for_source_gui()
     else:
-        source, mode = args.url, args.mode
+        source, mode, genero = args.url, args.mode, args.genero
 
     config = load_config()
     facecam_rect = config.get("facecam_rect", {"x": 0.0, "y": 0.72, "w": 0.28, "h": 0.28})
@@ -1705,8 +1889,8 @@ def main() -> None:
     keyword_hits = find_keyword_hits(segments, keywords)
     print(f"  {len(keyword_hits)} trechos batendo com palavras-chave.")
 
-    print("Detectando highlights com LLM (Groq)...")
-    llm_highlights = detect_highlights_llm(segments, groq_client, args.llm_model, status=win)
+    print(f"Detectando highlights com LLM (Groq) — gênero: {GENRE_PROFILES[genero]['label']}...")
+    llm_highlights = detect_highlights_llm(segments, groq_client, args.llm_model, genero=genero, status=win)
     print(f"  {len(llm_highlights)} highlights sugeridos pelo LLM.")
 
     beats = build_beats(
@@ -1717,6 +1901,7 @@ def main() -> None:
         facecam_motion_standalone_sigma=args.facecam_motion_threshold,
         pre_silence_db=args.pre_silence_db,
         pre_stillness_sigma=args.pre_stillness_sigma,
+        fallback_categoria=GENRE_PROFILES[genero]["fallback_categoria"],
     )
 
     if not beats:
@@ -1735,7 +1920,7 @@ def main() -> None:
     stories = curate_stories(
         beats, groq_client, args.llm_model,
         num_stories=args.num_stories, target_min=args.story_min, target_max=args.story_max,
-        status=win,
+        genero=genero, status=win,
     )
 
     if not stories:
